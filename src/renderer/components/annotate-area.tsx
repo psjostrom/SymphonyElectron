@@ -44,6 +44,12 @@ const AnnotateArea: React.FunctionComponent<IAnnotateAreaProps> = ({
 }) => {
   const [isDrawing, setIsDrawing] = useState(false);
 
+  const factor = 1 / window.devicePixelRatio;
+  const annotateArea = document.getElementById('annotate-area');
+  if (annotateArea) {
+    annotateArea.style.transform = 'scale(' + factor + ')';
+  }
+
   const maybeErasePath = (key: string) => {
     if (chosenTool === Tool.eraser) {
       const updPaths = [...paths];
