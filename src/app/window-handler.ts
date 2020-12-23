@@ -137,6 +137,7 @@ export class WindowHandler {
   private basicAuthWindow: Electron.BrowserWindow | null = null;
   private notificationSettingsWindow: Electron.BrowserWindow | null = null;
   private snippingToolWindow: Electron.BrowserWindow | null = null;
+  private drawToolWindow: Electron.BrowserWindow | null = null;
 
   private finishedLoading: boolean;
 
@@ -973,6 +974,131 @@ export class WindowHandler {
       if (this.aboutAppWindow && windowExists(this.aboutAppWindow)) {
         this.aboutAppWindow.webContents.send('about-app-data', aboutInfo);
       }
+    });
+  }
+
+  /**
+   * Creates the snipping tool window
+   */
+  public createDrawToolWindow(
+    drawDimensions: {
+      height: number;
+      width: number;
+    },
+  ): void {
+    // Prevents creating multiple instances
+    if (didVerifyAndRestoreWindow(this.drawToolWindow)) {
+      logger.error('window-handler: Could not open draw tool window');
+      return;
+    }
+
+    const OS_PADDING = 25;
+    const MIN_TOOL_HEIGHT = 312;
+    const MIN_TOOL_WIDTH = 320;
+    const BUTTON_BAR_TOP_HEIGHT = 48;
+    const BUTTON_BAR_BOTTOM_HEIGHT = 72;
+    const BUTTON_BARS_HEIGHT = BUTTON_BAR_TOP_HEIGHT + BUTTON_BAR_BOTTOM_HEIGHT;
+
+    const opts: ICustomBrowserWindowConstructorOpts = this.getWindowOpts(
+      {
+        width: drawDimensions.width,
+        height: drawDimensions.height,
+        modal: false,
+        alwaysOnTop: false,
+        resizable: true,
+        fullscreenable: false,
+      },
+      {
+        devTools: true,
+      },
+    );
+
+    const electronWindows = BrowserWindow.getAllWindows();
+    const mainWindow = electronWindows[0];
+
+    if (!mainWindow) {
+      logger.error('window-handler: Could not get main window');
+      return;
+    }
+
+    const display = electron.screen.getDisplayMatching(mainWindow.getBounds());
+    const workAreaSize = display.workAreaSize;
+    const maxToolHeight = Math.floor(calculatePercentage(workAreaSize.height, 90));
+    const maxToolWidth = Math.floor(calculatePercentage(workAreaSize.width, 90));
+    const availableAnnotateAreaHeight = maxToolHeight - BUTTON_BARS_HEIGHT;
+    const availableAnnotateAreaWidth = maxToolWidth;
+
+    const annotateAreaHeight = drawDimensions.height > availableAnnotateAreaHeight ?
+      availableAnnotateAreaHeight :
+      drawDimensions.height;
+    const annotateAreaWidth = drawDimensions.width > availableAnnotateAreaWidth ?
+      availableAnnotateAreaWidth :
+      drawDimensions.width;
+
+    let toolHeight: number;
+    let toolWidth: number;
+
+    if (drawDimensions.height + BUTTON_BARS_HEIGHT >= maxToolHeight) {
+      toolHeight = maxToolHeight + OS_PADDING;
+    } else if (drawDimensions.height + BUTTON_BARS_HEIGHT <= MIN_TOOL_HEIGHT) {
+      toolHeight = MIN_TOOL_HEIGHT + OS_PADDING;
+    } else {
+      toolHeight = drawDimensions.height + BUTTON_BARS_HEIGHT + OS_PADDING;
+    }
+
+    if (drawDimensions.width >= maxToolWidth) {
+      toolWidth = maxToolWidth;
+    } else if (drawDimensions.width <= MIN_TOOL_WIDTH) {
+      toolWidth = MIN_TOOL_WIDTH;
+    } else {
+      toolWidth = drawDimensions.width;
+    }
+
+    if (
+      this.mainWindow &&
+      windowExists(this.mainWindow) &&
+      this.mainWindow.isAlwaysOnTop()
+    ) {
+      opts.alwaysOnTop = true;
+    }
+
+    if (isWindowsOS && mainWindow) {
+      opts.parent = mainWindow;
+    }
+
+    this.drawToolWindow = createComponentWindow('snipping-tool', opts);
+    this.moveWindow(this.drawToolWindow);
+    this.drawToolWindow.setVisibleOnAllWorkspaces(true);
+
+    this.drawToolWindow.webContents.once('did-finish-load', async () => {
+      const drawToolInfo = {
+        annotateAreaHeight,
+        annotateAreaWidth,
+        snippetImageHeight: drawDimensions.height,
+        snippetImageWidth: drawDimensions.width,
+      };
+      if (this.drawToolWindow && windowExists(this.drawToolWindow)) {
+        this.drawToolWindow.webContents.setZoomFactor(1);
+        const windowBounds = this.drawToolWindow.getBounds();
+        logger.info('window-handler: Opening snipping tool window on display: ' + JSON.stringify(display));
+        logger.info('window-handler: Opening snipping tool window with size: ' + JSON.stringify({ toolHeight, toolWidth }));
+        logger.info('window-handler: Opening snipping tool content with metadata: ' + JSON.stringify(drawToolInfo));
+        logger.info('window-handler: Actual window size: ' + JSON.stringify(windowBounds));
+        if (windowBounds.height !== toolHeight || windowBounds.width !== toolWidth) {
+          logger.info('window-handler: Could not create window with correct size, resizing with setBounds');
+          this.drawToolWindow.setBounds({ height: toolHeight, width: toolWidth });
+          logger.info('window-handler: window bounds after resizing: ' + JSON.stringify(this.drawToolWindow.getBounds()));
+        }
+        this.drawToolWindow.webContents.send(
+          'snipping-tool-data',
+          drawToolInfo,
+        );
+      }
+    });
+
+    this.drawToolWindow.once('closed', () => {
+      this.removeWindow(opts.winKey);
+      this.drawToolWindow = null;
     });
   }
 

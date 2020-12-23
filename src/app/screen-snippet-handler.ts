@@ -59,6 +59,67 @@ class ScreenSnippet {
   }
 
   /**
+   * Starts drawing
+   *
+   * @param webContents {Electron.webContents}
+   */
+  public async draw() {
+    const mainWindow = windowHandler.getMainWindow();
+    if (mainWindow && windowExists(mainWindow) && isWindowsOS) {
+      this.shouldUpdateAlwaysOnTop = mainWindow.isAlwaysOnTop();
+      if (this.shouldUpdateAlwaysOnTop) {
+        await updateAlwaysOnTop(false, false, false);
+      }
+    }
+    logger.info(`screen-snippet-handler: Starting draw tool!`);
+    this.outputFilePath = path.join(
+      this.tempDir,
+      'symphonyImage-' + Date.now() + '.png',
+    );
+    this.focusedWindow = BrowserWindow.getFocusedWindow();
+
+    // only allow one draw at a time.
+    if (this.child) {
+      logger.info(
+        `screen-snippet-handler: Child draw exists, killing it and keeping only 1 instance!`,
+      );
+      this.killChildProcess();
+    }
+    windowHandler.createDrawToolWindow({ height: 600, width: 800 });
+
+    // try {
+    //   await this.execCmd(this.captureUtil, this.captureUtilArgs);
+    //   if (windowHandler.isMana) {
+    //     logger.info('screen-snippet-handler: Attempting to extract image dimensions from: ' + this.outputFilePath);
+    //     const dimensions = this.getImageDimensions(this.outputFilePath);
+    //     logger.info('screen-snippet-handler: Extracted dimensions from image: ' + JSON.stringify(dimensions));
+    //     if (!dimensions) {
+    //       logger.error('screen-snippet-handler: Could not get image size');
+    //       return;
+    //     }
+    //     windowHandler.closeSnippingToolWindow();
+    //     this.uploadSnippet(webContents);
+    //     return;
+    //   }
+    //   const {
+    //     message,
+    //     data,
+    //     type,
+    //   }: IScreenSnippet = await this.convertFileToData();
+    //   logger.info(
+    //     `screen-snippet-handler: Snippet captured! Sending data straight to SFE without opening annotate tool`,
+    //   );
+    //   webContents.send('screen-snippet-data', { message, data, type });
+    //   await this.verifyAndUpdateAlwaysOnTop();
+    // } catch (error) {
+    //   await this.verifyAndUpdateAlwaysOnTop();
+    //   logger.error(
+    //     `screen-snippet-handler: screen capture failed, user probably escaped the capture. Error: ${error}!`,
+    //   );
+    // }
+  }
+
+  /**
    * Captures a user selected portion of the monitor and returns jpeg image
    * encoded in base64 format.
    *
@@ -118,7 +179,7 @@ class ScreenSnippet {
           return;
         }
         windowHandler.closeSnippingToolWindow();
-        windowHandler.createSnippingToolWindow(this.outputFilePath, dimensions);
+        windowHandler.createDrawToolWindow({ height: 600, width: 800 });
         this.uploadSnippet(webContents);
       return;
     }
